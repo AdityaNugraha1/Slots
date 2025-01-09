@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin Dashboard</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <center>
+  <div style="display: flex; flex-direction: column;">
+  <h2>Admin Dashboard</h2>
+  <button onclick="logout()">Logout</button>
+  <table>
+    <thead>
+      <tr>
+        <th>Username</th>
+        <th>Coins</th>
+        <th>Wins</th>
+        <th>Losses</th>
+        <th>Win Percentage</th>
+        <th>Active</th>
+        <th>Role</th>
+      </tr>
+    </thead>
+    <tbody id="userTable">
+      <!-- User data will be populated here -->
+    </tbody>
+  </table>
+  <script src="js/admin.js"></script>
+</div>
+</center>
+</body>
+</html>

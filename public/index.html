@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Slot Machine</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div id="login">
+    <h2>Login</h2>
+    <input type="text" id="username" placeholder="Username">
+    <input type="password" id="password" placeholder="Password">
+    <button onclick="login()">Login</button>
+    <button onclick="showRegister()">Register</button>
+  </div>
+  <div id="register" style="display:none;">
+    <h2>Register</h2>
+    <input type="text" id="regUsername" placeholder="Username">
+    <input type="password" id="regPassword" placeholder="Password">
+    <button onclick="register()">Register</button>
+    <button onclick="showLogin()">Login</button>
+  </div>
+  <div id="game" style="display:none;">
+    <h2>Slot Machine</h2>
+    <div class="slots-container">
+      <div class="slots">
+        <div class="reel"></div>
+        <div class="reel"></div>
+        <div class="reel"></div>
+      </div>
+      <div id="debug" class="debug">Good luck!</div>
+    </div>
+    <div class="betting-controls">
+      <label for="betAmount">Bet Amount:</label>
+      <div class="bet-amount-container">
+        <input type="number" id="betAmount" min="1" value="10">
+      </div>
+    </div>
+    <button onclick="spin()">Spin</button>
+    <button id="autoSpinButton" onclick="toggleAutoSpin()">Start Auto Spin</button>
+    <button onclick="logout()">Logout</button>
+    <p>Coins: <span id="coins">0</span></p>
+    <p id="resultMessage"></p>
+  </div>
+
+  <!-- Modal -->
+  <div id="modal" class="modal">
+    <div class="modal-content">
+      <span class="close" onclick="closeModal()">&times;</span>
+      <p id="modalMessage"></p>
+    </div>
+  </div>
+
+  <script src="js/client.js"></script>
+</body>
+</html>

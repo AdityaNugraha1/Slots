@@ -1,0 +1,218 @@
+body {
+  font-family: Arial, sans-serif;
+  background-color: #f0f0f0;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+}
+
+h2 {
+  color: #333;
+}
+
+#login, #register, #game {
+  background-color: #fff;
+  padding: 20px;
+  border-radius: 10px;
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+  text-align: center;
+}
+
+input[type="text"], input[type="password"] {
+  width: 100%;
+  padding: 10px;
+  margin: 10px 0;
+  border: 1px solid #ccc;
+  border-radius: 5px;
+}
+
+button {
+  padding: 10px 20px;
+  /* margin: 10px; */
+  margin-top: 1%;
+  border: none;
+  border-radius: 5px;
+  background-color: #007bff;
+  color: #fff;
+  cursor: pointer;
+  font-size: 16px;
+  width: 100%;
+}
+
+button:hover {
+  background-color: #0056b3;
+}
+
+
+#slot {
+  display: flex;
+  justify-content: center;
+  margin: 20px 0;
+}
+
+#slot span {
+  font-size: 2em;
+  margin: 0 10px;
+}
+
+#slot img {
+  width: 100px;
+  height: 100px;
+  margin: 0 10px;
+  border: 2px solid #ccc;
+  border-radius: 10px;
+  transition: transform 1s;
+}
+
+#slot img.spin {
+  transform: rotate(360deg);
+}
+
+.spin {
+  animation: spin 1s ease-in-out;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+#coins, #resultMessage {
+  font-size: 1.2em;
+  margin: 10px 0;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 20px;
+}
+
+table, th, td {
+  border: 1px solid #ccc;
+}
+
+th, td {
+  padding: 10px;
+  text-align: center;
+}
+
+th {
+  background-color: #007bff;
+  color: #fff;
+}
+
+td {
+  background-color: #f9f9f9;
+}
+
+select {
+  padding: 5px;
+  border-radius: 5px;
+  border: 1px solid #ccc;
+}
+
+.slots-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.slots {
+  display: flex;
+  justify-content: space-between;
+  width: calc(3 * 79px + 20px);
+  height: 237px;
+  background: #ddd;
+  border: 3px solid #444;
+  border-radius: 8px;
+  overflow: hidden;
+  position: relative;
+}
+
+.reel {
+  width: 79px;
+  height: 237px;
+  background-image: url('https://assets.codepen.io/439000/slotreel.webp');
+  background-repeat: repeat-y;
+  background-position: 0 0;
+  transition: background-position-y 2.5s cubic-bezier(.17,.67,.83,.67);
+  border: 1px solid #444;
+  will-change: background-position;
+}
+
+.debug {
+  margin-top: 20px;
+  font-size: 1.2rem;
+  background: #fff;
+  padding: 10px;
+  border: 1px solid #ccc;
+  border-radius: 5px;
+  transition: opacity 0.3s ease;
+}
+
+.betting-controls {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin: 20px 0;
+}
+
+.bet-amount-container {
+  display: flex;
+  align-items: center;
+  background: #f0f0f0;
+  border-radius: 5px;
+  padding: 5px 10px;
+  margin-left: 10px;
+}
+
+.bet-amount-container input {
+  border: none;
+  background: transparent;
+  font-size: 16px;
+  width: 60px;
+  text-align: center;
+}
+
+/* Modal Styles */
+.modal {
+  display: none;
+  position: fixed;
+  z-index: 1;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: 100%;
+  overflow: auto;
+  background-color: rgb(0,0,0);
+  background-color: rgba(0,0,0,0.4);
+}
+
+.modal-content {
+  background-color: #fefefe;
+  margin: 15% auto;
+  padding: 20px;
+  border: 1px solid #888;
+  width: 80%;
+  max-width: 500px;
+  border-radius: 10px;
+  text-align: center;
+}
+
+.close {
+  color: #aaa;
+  float: right;
+  font-size: 28px;
+  font-weight: bold;
+}
+
+.close:hover,
+.close:focus {
+  color: black;
+  text-decoration: none;
+  cursor: pointer;
+}
