@@ -110,7 +110,7 @@ app.post('/login', async (req, res) => {
           return res.send({ 
             message: 'Login successful', 
             redirect: '/',
-            coins: user.coins || 200,
+            coins: user.coins ?? 0,
             username: username,
             role: user.role
           });
@@ -134,7 +134,7 @@ app.post('/register', async (req, res) => {
   }
   await userRef.set({
     password,
-    coins: 200,
+    coins: 0,
     wins: 0,
     losses: 0,
     winPercentage: 30,
@@ -334,7 +334,7 @@ async function handleSpin(ws, username, betAmount) {
       combination = {
         type: 'three_of_a_kind',
         symbol: winningSymbol,
-        message: `Triple ${winningSymbol}! Win ${winAmount} coins! (${multiplier}x)`
+        message: `Triple ${winningSymbol}! Win ${winAmount} coins!` // Removed "win!" prefix
       };
     }
 

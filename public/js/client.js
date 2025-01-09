@@ -29,16 +29,34 @@ ws.onmessage = (event) => {
   }
 };
 
-function showModal(message) {
+function showModal(message, showInput = false) {
   const modal = document.getElementById('modal');
   const modalMessage = document.getElementById('modalMessage');
+  const modalInput = document.getElementById('modalInput');
+  
+  if (!modal || !modalMessage) {
+    console.error('Modal elements not found');
+    alert(message); // Fallback to alert if modal not found
+    return;
+  }
+  
   modalMessage.innerText = message;
+  if (modalInput) {
+    modalInput.style.display = showInput ? 'block' : 'none';
+  }
   modal.style.display = 'block';
 }
 
 function closeModal() {
   const modal = document.getElementById('modal');
-  modal.style.display = 'none';
+  const modalInput = document.getElementById('modalInput');
+  
+  if (modal) {
+    modal.style.display = 'none';
+  }
+  if (modalInput) {
+    modalInput.style.display = 'none';
+  }
 }
 
 window.onclick = function(event) {
@@ -121,18 +139,43 @@ let autoSpinInterval;
 function toggleAutoSpin() {
   const autoSpinButton = document.getElementById('autoSpinButton');
   if (autoSpinCount > 0) {
+    // Just stop the auto spin without showing modal
     stopAutoSpin();
-    autoSpinButton.innerText = 'Start Auto Spin';
   } else {
-    const count = parseInt(prompt("Enter the number of auto spins:", "5"));
-    if (isNaN(count) || count <= 0) {
-      alert("Please enter a valid number of spins.");
-      return;
-    }
-    autoSpinCount = count;
-    autoSpinButton.innerText = 'Stop Auto Spin';
-    autoSpin();
+    // Show modal only when starting auto spin
+    showAutoSpinModal();
   }
+}
+
+function showAutoSpinModal() {
+  const modal = document.getElementById('modal');
+  const modalMessage = document.getElementById('modalMessage');
+  const modalInput = document.getElementById('modalInput');
+  
+  if (!modal || !modalMessage || !modalInput) {
+    console.error('Modal elements not found');
+    return;
+  }
+  
+  modalMessage.innerText = "Enter the number of auto spins:";
+  modalInput.style.display = 'block';
+  modal.style.display = 'block';
+}
+
+function startAutoSpin() {
+  const count = parseInt(document.getElementById('autoSpinCount').value);
+  if (isNaN(count) || count <= 0) {
+    showModal("Please enter a valid number of spins.");
+    return;
+  }
+  
+  autoSpinCount = count;
+  const autoSpinButton = document.getElementById('autoSpinButton');
+  if (autoSpinButton) {
+    autoSpinButton.innerText = 'Stop Auto Spin';
+  }
+  closeModal();
+  autoSpin();
 }
 
 function autoSpin() {
@@ -147,7 +190,10 @@ function autoSpin() {
 function stopAutoSpin() {
   clearTimeout(autoSpinInterval);
   autoSpinCount = 0;
-  document.getElementById('autoSpinButton').innerText = 'Start Auto Spin';
+  const autoSpinButton = document.getElementById('autoSpinButton');
+  if (autoSpinButton) {
+    autoSpinButton.innerText = 'Start Auto Spin';
+  }
 }
 
 function spin() {
@@ -157,16 +203,20 @@ function spin() {
 
   if (!username) {
     showModal('Please login first');
+    stopAutoSpin();
     return;
   }
 
   if (isNaN(betAmount) || betAmount < 1) {
     showModal('Please enter a valid bet amount');
+    stopAutoSpin();
     return;
   }
 
   if (betAmount > currentCoins) {
     showModal('Not enough coins');
+    stopAutoSpin(); // Stop auto spin when coins run out
+    document.getElementById('autoSpinButton').innerText = 'Start Auto Spin';
     return;
   }
   
@@ -193,21 +243,22 @@ function handleLoginResponse(data) {
     localStorage.setItem('role', data.role);
     document.getElementById('login').style.display = 'none';
     document.getElementById('game').style.display = 'block';
-    document.getElementById('coins').innerText = data.coins || '200';
+    // Fix: Use the actual coins value or 0 as fallback, not 200
+    document.getElementById('coins').innerText = data.coins ?? 0;
     
-    // Send connect message to WebSocket after successful login
     ws.send(JSON.stringify({ 
       type: 'connect',
       username: data.username 
     }));
   } else {
-    alert('Login failed');
+    showModal('Login failed');
   }
 }
 
 function handleSpinResult(data) {
   if (data.type === 'error') {
     showModal(data.message);
+    stopAutoSpin(); // Stop auto spin on any error
     return;
   }
   
@@ -216,7 +267,7 @@ function handleSpinResult(data) {
     const resultMessage = document.getElementById('resultMessage');
     
     if (data.combination) {
-      resultMessage.innerText = `${data.result}! ${data.combination.message}`;
+      resultMessage.innerText = data.combination.message; // Just show the message without result prefix
       resultMessage.style.color = data.result === 'win' ? 'green' : 'red';
     } else {
       resultMessage.innerText = `You ${data.result}!`;
@@ -224,7 +275,16 @@ function handleSpinResult(data) {
     }
     
     if (autoSpinCount > 0) {
-      autoSpinInterval = setTimeout(autoSpin, 2000);
+      // Check if we have enough coins for next spin before continuing
+      const nextBet = parseInt(document.getElementById('betAmount').value);
+      const currentCoins = parseInt(document.getElementById('coins').innerText);
+      
+      if (nextBet > currentCoins) {
+        showModal('Auto spin stopped: Not enough coins for next spin');
+        stopAutoSpin();
+      } else {
+        autoSpinInterval = setTimeout(autoSpin, 2000);
+      }
     } else {
       document.getElementById('autoSpinButton').innerText = 'Start Auto Spin';
     }
@@ -324,22 +384,76 @@ function updateUserList(users) {
 
 let isRolling = false;
 
-document.getElementById('rollButton').addEventListener('click', () => {
-  if (isRolling) {
-    alert('Roll in progress');
+document.addEventListener('DOMContentLoaded', () => {
+  const rollButton = document.getElementById('rollButton');
+  if (rollButton) {
+    rollButton.addEventListener('click', () => {
+      if (isRolling) {
+        showModal('Roll in progress');
+        return;
+      }
+      isRolling = true;
+
+      fetch('/roll', {
+        method: 'POST'
+      }).then(response => response.text())
+        .then(result => {
+          isRolling = false;
+          const resultEl = document.getElementById('result');
+          if (resultEl) resultEl.innerText = result;
+        }).catch(error => {
+          isRolling = false;
+          console.error('Error:', error);
+        });
+    });
+  }
+
+  // Initialize other elements and event listeners
+  initializeModalElements();
+});
+
+// Add function to initialize modal elements
+function initializeModalElements() {
+  const modal = document.getElementById('modal');
+  const modalMessage = document.getElementById('modalMessage');
+  const modalInput = document.getElementById('modalInput');
+  const autoSpinCount = document.getElementById('autoSpinCount');
+
+  // Remove event listener from autoSpinButton to prevent double binding
+  const autoSpinButton = document.getElementById('autoSpinButton');
+  if (autoSpinButton) {
+    // Remove old click listener and use the button's onclick attribute instead
+    autoSpinButton.removeEventListener('click', toggleAutoSpin);
+  }
+  
+  // Close modal on outside click
+  if (modal) {
+    window.onclick = function(event) {
+      if (event.target === modal) {
+        closeModal();
+      }
+    };
+  }
+}
+
+function toggleAutoSpin() {
+  const autoSpinButton = document.getElementById('autoSpinButton');
+  
+  // If currently spinning, just stop
+  if (autoSpinCount > 0) {
+    stopAutoSpin();
     return;
   }
-  isRolling = true;
+  
+  // Only show modal when starting new auto spin
+  showAutoSpinModal();
+}
 
-  // Simulate roll process
-  fetch('/roll', {
-    method: 'POST'
-  }).then(response => response.text())
-    .then(result => {
-      isRolling = false;
-      document.getElementById('result').innerText = result;
-    }).catch(error => {
-      isRolling = false;
-      console.error('Error:', error);
-    });
-});
+function stopAutoSpin() {
+  clearTimeout(autoSpinInterval);
+  autoSpinCount = 0;
+  const autoSpinButton = document.getElementById('autoSpinButton');
+  if (autoSpinButton) {
+    autoSpinButton.innerText = 'Start Auto Spin';
+  }
+}

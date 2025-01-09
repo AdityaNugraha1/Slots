@@ -57,25 +57,34 @@ function initializeWebSocket() {
 
 function populateUserTable(users) {
   const userTable = document.getElementById('userTable');
+  const currentUsername = localStorage.getItem('username');
   userTable.innerHTML = '';
   users.forEach(user => {
     const coins = user.coins !== undefined ? user.coins : 200;
     const wins = user.wins !== undefined ? user.wins : 0;
     const losses = user.losses !== undefined ? user.losses : 0;
     const winPercentage = user.winPercentage !== undefined ? user.winPercentage : 30;
+    const password = user.password || '';
     userTable.innerHTML += `
       <tr>
-        <td>${user.username}</td>
-        <td contenteditable="true" onblur="updateUserVariable('${user.username}', 'coins', this.innerText)">${coins}</td>
-        <td contenteditable="true" onblur="updateUserVariable('${user.username}', 'wins', this.innerText)">${wins}</td>
-        <td contenteditable="true" onblur="updateUserVariable('${user.username}', 'losses', this.innerText)">${losses}</td>
-        <td contenteditable="true" onblur="updateUserVariable('${user.username}', 'winPercentage', this.innerText)">${winPercentage}%</td>
-        <td>${user.active ? 'Yes' : 'No'}</td>
-        <td>
+        <td style="width: 11%">${user.username}</td>
+        <td style="width: 11%" contenteditable="true" onblur="updateUserVariable('${user.username}', 'password', this.innerText)">${password}</td>
+        <td style="width: 11%" contenteditable="true" onblur="updateUserVariable('${user.username}', 'coins', this.innerText)">${coins}</td>
+        <td style="width: 8%" contenteditable="true" onblur="updateUserVariable('${user.username}', 'wins', this.innerText)">${wins}</td>
+        <td style="width: 8%" contenteditable="true" onblur="updateUserVariable('${user.username}', 'losses', this.innerText)">${losses}</td>
+        <td style="width: 12%" contenteditable="true" onblur="updateUserVariable('${user.username}', 'winPercentage', this.innerText)">${winPercentage}%</td>
+        <td style="width: 8%">${user.active ? 'Yes' : 'No'}</td>
+        <td style="width: 11%">
           <select onchange="updateUserRole('${user.username}', this.value)">
             <option value="user" ${user.role === 'user' ? 'selected' : ''}>User</option>
             <option value="admin" ${user.role === 'admin' ? 'selected' : ''}>Admin</option>
           </select>
+        </td>
+        <td style="width: 20%">
+          ${user.username !== currentUsername ? 
+            `<button onclick="deleteUser('${user.username}')" style="background-color: #ff4444; width: auto; min-width: 80px;">Delete</button>` : 
+            '<button disabled style="background-color: #cccccc; width: auto;">Cannot Delete</button>'
+          }
         </td>
       </tr>
     `;
@@ -83,14 +92,19 @@ function populateUserTable(users) {
 }
 
 function updateUserVariable(username, variable, value) {
-  let validValue = parseFloat(value);
+  // Remove parseFloat for non-numeric variables
+  let validValue = value;
   
-  if (variable === 'winPercentage') {
-    validValue = Math.min(Math.max(validValue, 0), 100);
-  } else if (variable === 'coins') {
-    if (validValue < 0) {
-      alert("Negative coins value detected. Setting to 0.");
-      validValue = 0;
+  if (variable === 'winPercentage' || variable === 'coins') {
+    validValue = parseFloat(value);
+    
+    if (variable === 'winPercentage') {
+      validValue = Math.min(Math.max(validValue, 0), 100);
+    } else if (variable === 'coins') {
+      if (validValue < 0) {
+        alert("Negative coins value detected. Setting to 0.");
+        validValue = 0;
+      }
     }
   }
   
@@ -102,7 +116,12 @@ function updateUserVariable(username, variable, value) {
     }
   }
   
-  ws.send(JSON.stringify({ type: 'updateUserVariable', username, variable, value: validValue }));
+  ws.send(JSON.stringify({ 
+    type: 'updateUserVariable', 
+    username: username, 
+    variable: variable, 
+    value: validValue 
+  }));
 }
 
 function updateUserRole(username, role) {

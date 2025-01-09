@@ -42,13 +42,18 @@
     <button onclick="logout()">Logout</button>
     <p>Coins: <span id="coins">0</span></p>
     <p id="resultMessage"></p>
-  </div>
-
-  <!-- Modal -->
-  <div id="modal" class="modal">
-    <div class="modal-content">
-      <span class="close" onclick="closeModal()">&times;</span>
-      <p id="modalMessage"></p>
+    <div class="modal" id="modal">
+      <div class="modal-content">
+        <span class="close" onclick="closeModal()">&times;</span>
+        <p id="modalMessage"></p>
+        <div id="modalInput" style="display: none;">
+          <input type="number" id="autoSpinCount" min="1" value="5" style="width: 100px; margin: 10px;">
+          <div class="modal-buttons">
+            <button onclick="startAutoSpin()">Start</button>
+            <button onclick="closeModal()">Cancel</button>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 

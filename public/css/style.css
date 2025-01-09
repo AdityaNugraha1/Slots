@@ -85,14 +85,76 @@ button:hover {
   margin: 10px 0;
 }
 
+/* Update table styles */
 table {
   width: 100%;
   border-collapse: collapse;
   margin-top: 20px;
+  table-layout: fixed;
 }
 
-table, th, td {
-  border: 1px solid #ccc;
+th, td {
+  padding: 8px;
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  border: 1px solid #ddd;
+  vertical-align: middle;
+}
+
+colgroup col {
+  border: none;
+}
+
+td[contenteditable="true"] {
+  white-space: normal;
+  background-color: #fff;
+  cursor: text;
+}
+
+td[contenteditable="true"]:hover {
+  background-color: #f0f0f0;
+}
+
+td[contenteditable="true"]:focus {
+  background-color: #e8f0fe;
+  outline: 2px solid #007bff;
+}
+
+/* Make delete button fit in cell */
+td button {
+  width: auto !important;
+  min-width: 80px;
+  max-width: 120px;
+  padding: 5px 10px;
+  margin: 0;
+  font-size: 14px;
+}
+
+/* Update button styles in table */
+td button {
+  margin: 0;
+  padding: 5px 10px;
+  font-size: 14px;
+  min-width: 80px;
+  white-space: nowrap;
+  display: inline-block;
+  overflow: visible;
+}
+
+td button[disabled] {
+  width: 150px !important;
+  opacity: 0.7;
+}
+
+/* Adjust select dropdown width */
+td select {
+  width: 90%;
+  min-width: 80px;
+  max-width: 100px;
+  margin: 0;
+  padding: 5px;
 }
 
 th, td {
@@ -215,4 +277,49 @@ select {
   color: black;
   text-decoration: none;
   cursor: pointer;
+}
+
+/* Add or update table cell styles */
+td button {
+  margin: 0;
+  padding: 5px 10px;
+  font-size: 14px;
+  min-width: 80px;
+}
+
+td[contenteditable="true"] {
+  background-color: #fff;
+  cursor: text;
+  transition: background-color 0.3s;
+}
+
+td[contenteditable="true"]:hover {
+  background-color: #f0f0f0;
+}
+
+td[contenteditable="true"]:focus {
+  background-color: #e8f0fe;
+  outline: 2px solid #007bff;
+}
+
+/* Update modal styles */
+.modal-buttons {
+  margin-top: 15px;
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+}
+
+.modal-buttons button {
+  width: auto;
+  min-width: 80px;
+  padding: 8px 20px;
+}
+
+#modalInput input {
+  padding: 8px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 16px;
+  text-align: center;
 }
