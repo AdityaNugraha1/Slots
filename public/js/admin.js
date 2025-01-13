@@ -1,4 +1,4 @@
-let ws;
+let eventSource;
 
 document.addEventListener('DOMContentLoaded', async () => {
   try {
@@ -10,49 +10,112 @@ document.addEventListener('DOMContentLoaded', async () => {
       return;
     }
     
-    initializeWebSocket();
+    // Fetch initial user list
+    const usersResponse = await fetch('/admin/users');
+    const usersData = await usersResponse.json();
+    populateUserTable(usersData.users);
+    
+    initializeEventSource();
   } catch (error) {
     console.error('Auth check failed:', error);
     window.location.replace('/');
   }
 });
 
-function initializeWebSocket() {
-  ws = new WebSocket('ws://localhost:3000');
+function initializeEventSource() {
+  if (eventSource) {
+    eventSource.close();
+  }
 
-  ws.onopen = () => {
-    console.log('WebSocket connected');
-    const username = localStorage.getItem('username');
-    if (username) {
-      ws.send(JSON.stringify({
-        type: 'adminConnect',
-        username: username
-      }));
-    }
+  eventSource = new EventSource('/events');
+  
+  eventSource.onopen = () => {
+    console.log('SSE Connected');
   };
 
-  ws.onmessage = (event) => {
+  // Listen for userList updates
+  eventSource.addEventListener('userList', (e) => {
     try {
-      const data = JSON.parse(event.data);
-      console.log('Received message:', data);
-      
-      if (data.type === 'userList') {
-        populateUserTable(data.users);
-      } else if (data.type === 'error') {
-        console.error('WebSocket error:', data.message);
-        if (data.message === 'Unauthorized access') {
-          window.location.replace('/');
+      const data = JSON.parse(e.data);
+      console.log('Received user list update:', data);
+      if (data.users) {
+        requestAnimationFrame(() => {
+          populateUserTable(data.users);
+        });
+      }
+    } catch (error) {
+      console.error('Error handling user list:', error);
+    }
+  });
+
+  // Listen for spinResult updates
+  eventSource.addEventListener('spinResult', (e) => {
+    try {
+      const data = JSON.parse(e.data);
+      console.log('Received spin result:', data);
+      if (data.username && data.newCoins !== undefined) {
+        // Update coins cell for the specific user
+        const coinsCell = document.querySelector(`td[onblur="updateUserVariable('${data.username}', 'coins', this.innerText)"]`);
+        if (coinsCell) {
+          coinsCell.innerText = data.newCoins;
         }
       }
     } catch (error) {
-      console.error('Error handling message:', error);
+      console.error('Error handling spin result:', error);
     }
-  };
+  });
 
-  ws.onclose = () => {
-    console.log('WebSocket disconnected. Reconnecting...');
-    setTimeout(initializeWebSocket, 1000);
-  };
+  // Enhanced error handling
+  eventSource.addEventListener('error', (e) => {
+    console.error('SSE Error:', e);
+    eventSource.close();
+    setTimeout(initializeEventSource, 1000);
+  });
+}
+
+// Update updateUserVariable to avoid page refresh
+async function updateUserVariable(username, variable, value) {
+  try {
+    let processedValue = value.toString().replace('%', '');
+    
+    if (variable === 'winPercentage' || variable === 'coins' || variable === 'wins' || variable === 'losses') {
+      processedValue = parseFloat(processedValue);
+      if (isNaN(processedValue)) {
+        throw new Error('Invalid number value');
+      }
+    }
+
+    const response = await fetch('/updateUserVariable', {
+      method: 'POST',
+      headers: { 
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ 
+        username, 
+        variable, 
+        value: processedValue 
+      })
+    });
+
+    const data = await response.json();
+    
+    if (!data.success) {
+      throw new Error(data.error || 'Update failed');
+    }
+
+    // Update cell immediately with the confirmed value
+    const cell = document.querySelector(`td[onblur="updateUserVariable('${username}', '${variable}', this.innerText)"]`);
+    if (cell) {
+      const displayValue = variable === 'winPercentage' ? 
+        `${data.updatedValue}%` : 
+        data.updatedValue;
+      cell.innerText = displayValue;
+    }
+
+  } catch (error) {
+    console.error('Error updating user variable:', error);
+    alert(`Failed to update ${variable}: ${error.message}`);
+  }
 }
 
 function populateUserTable(users) {
@@ -91,39 +154,6 @@ function populateUserTable(users) {
   });
 }
 
-function updateUserVariable(username, variable, value) {
-  // Remove parseFloat for non-numeric variables
-  let validValue = value;
-  
-  if (variable === 'winPercentage' || variable === 'coins') {
-    validValue = parseFloat(value);
-    
-    if (variable === 'winPercentage') {
-      validValue = Math.min(Math.max(validValue, 0), 100);
-    } else if (variable === 'coins') {
-      if (validValue < 0) {
-        alert("Negative coins value detected. Setting to 0.");
-        validValue = 0;
-      }
-    }
-  }
-  
-  // Immediately update the display value if it was modified
-  if (variable === 'coins' && validValue === 0) {
-    const cell = document.querySelector(`td[contenteditable="true"][onblur="updateUserVariable('${username}', 'coins', this.innerText)"]`);
-    if (cell) {
-      cell.innerText = '0';
-    }
-  }
-  
-  ws.send(JSON.stringify({ 
-    type: 'updateUserVariable', 
-    username: username, 
-    variable: variable, 
-    value: validValue 
-  }));
-}
-
 function updateUserRole(username, role) {
   fetch('/update-role', {
     method: 'POST',
@@ -143,9 +173,12 @@ function updateUserRole(username, role) {
 async function logout() {
   const username = localStorage.getItem('username');
   if (username) {
-    ws.send(JSON.stringify({ type: 'logout', username }));
+    await fetch('/logout', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username })
+    });
   }
   localStorage.removeItem('username');
-  await fetch('/logout');
   window.location.href = '/';
 }

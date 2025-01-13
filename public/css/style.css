@@ -196,7 +196,7 @@ select {
 }
 
 .reel {
-  width: 79px;
+  width: 100px;
   height: 237px;
   background-image: url('https://assets.codepen.io/439000/slotreel.webp');
   background-repeat: repeat-y;
@@ -300,26 +300,4 @@ td[contenteditable="true"]:hover {
 td[contenteditable="true"]:focus {
   background-color: #e8f0fe;
   outline: 2px solid #007bff;
-}
-
-/* Update modal styles */
-.modal-buttons {
-  margin-top: 15px;
-  display: flex;
-  justify-content: center;
-  gap: 10px;
-}
-
-.modal-buttons button {
-  width: auto;
-  min-width: 80px;
-  padding: 8px 20px;
-}
-
-#modalInput input {
-  padding: 8px;
-  border: 1px solid #ccc;
-  border-radius: 4px;
-  font-size: 16px;
-  text-align: center;
 }

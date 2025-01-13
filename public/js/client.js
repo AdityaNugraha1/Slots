@@ -2,32 +2,101 @@ const iconMap = ["banana", "seven", "cherry", "plum", "orange", "bell", "bar", "
 const iconHeight = 79;
 const numIcons = iconMap.length;
 let indexes = [0, 0, 0];
+let isSpinning = false; // Single declaration for the entire file
+let autoSpinCount = 0;
+let autoSpinInterval;
+let isAutoSpinning = false; // New state tracker for auto spin mode
 
-const ws = new WebSocket('ws://localhost:3000');
+// Replace WebSocket with EventSource
+const eventSource = new EventSource('/events');
 
-ws.onopen = () => {
-  console.log('WebSocket connected');
+eventSource.onopen = () => {
+  console.log('SSE Connected');
   const username = localStorage.getItem('username');
   if (username) {
-    ws.send(JSON.stringify({ type: 'connect', username }));
+    fetch('/connect', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username })
+    });
   }
 };
 
-ws.onmessage = (event) => {
-  const data = JSON.parse(event.data);
-  console.log('Received:', data);
-  switch (data.type) {
-    case 'login':
-      handleLoginResponse(data);
-      break;
-    case 'spinResult':
-      handleSpinResult(data);
-      break;
-    case 'error':
-      alert(data.message);
-      break;
+// Convert ws.onmessage handlers to SSE event listeners
+eventSource.addEventListener('spinResult', (e) => {
+  const data = JSON.parse(e.data);
+  handleSpinResult(data);
+});
+
+eventSource.addEventListener('error', (e) => {
+  console.error('SSE Error:', e);
+  setTimeout(() => {
+    // Attempt to reconnect
+    new EventSource('/events');
+  }, 1000);
+});
+
+// Add userList event listener
+eventSource.addEventListener('userList', (e) => {
+  try {
+    const data = JSON.parse(e.data);
+    console.log('Received user list update:', data);
+    if (data.users) {
+      // Update displayed coins for current user
+      const currentUser = data.users.find(u => u.username === localStorage.getItem('username'));
+      if (currentUser) {
+        document.getElementById('coins').innerText = currentUser.coins;
+      }
+    }
+  } catch (error) {
+    console.error('Error handling user list:', error);
   }
-};
+});
+
+// Add userUpdate event listener
+eventSource.addEventListener('userUpdate', (e) => {
+  try {
+    const data = JSON.parse(e.data);
+    console.log('Received user update:', data);
+    
+    const currentUsername = localStorage.getItem('username');
+    if (data.username === currentUsername) {
+      // Update specific field based on variable that changed
+      if (data.variable === 'coins') {
+        const coinsElement = document.getElementById('coins');
+        if (coinsElement) {
+          requestAnimationFrame(() => {
+            coinsElement.innerText = data.value;
+          });
+        }
+      }
+      
+      // You can add other variable updates here if needed
+      // For example wins, losses etc.
+    }
+  } catch (error) {
+    console.error('Error handling user update:', error);
+  }
+});
+
+// Update existing userList event listener
+eventSource.addEventListener('userList', (e) => {
+  try {
+    const data = JSON.parse(e.data);
+    console.log('Received user list update:', data);
+    if (data.users) {
+      const currentUsername = localStorage.getItem('username');
+      const currentUser = data.users.find(u => u.username === currentUsername);
+      if (currentUser) {
+        requestAnimationFrame(() => {
+          document.getElementById('coins').innerText = currentUser.coins;
+        });
+      }
+    }
+  } catch (error) {
+    console.error('Error handling user list:', error);
+  }
+});
 
 function showModal(message, showInput = false) {
   const modal = document.getElementById('modal');
@@ -80,11 +149,12 @@ async function login() {
       const result = await response.json();
       localStorage.setItem('username', username);
       
-      // Send connect message to WebSocket
-      ws.send(JSON.stringify({ 
-        type: 'connect',
-        username: username 
-      }));
+      // Send connect message to server
+      fetch('/connect', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username })
+      });
       
       if (result.redirect === '/') {
         document.getElementById('login').style.display = 'none';
@@ -126,15 +196,16 @@ async function register() {
 async function logout() {
   const username = localStorage.getItem('username');
   if (username) {
-    ws.send(JSON.stringify({ type: 'logout', username }));
+    fetch('/logout', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username })
+    });
   }
   localStorage.removeItem('username');
   await fetch('/logout');
   window.location.href = '/';
 }
-
-let autoSpinCount = 0;
-let autoSpinInterval;
 
 function toggleAutoSpin() {
   const autoSpinButton = document.getElementById('autoSpinButton');
@@ -170,71 +241,177 @@ function startAutoSpin() {
   }
   
   autoSpinCount = count;
+  isAutoSpinning = true; // Set auto spin mode
   const autoSpinButton = document.getElementById('autoSpinButton');
   if (autoSpinButton) {
     autoSpinButton.innerText = 'Stop Auto Spin';
+    autoSpinButton.style.backgroundColor = 'rgb(255, 0, 0)';
   }
   closeModal();
   autoSpin();
 }
 
 function autoSpin() {
-  if (autoSpinCount > 0) {
-    spin();
-    autoSpinCount--;
-  } else {
-    document.getElementById('autoSpinButton').innerText = 'Start Auto Spin';
+  if (isSpinning || !isAutoSpinning) {
+    return;
   }
+
+  const currentCoins = parseInt(document.getElementById('coins').innerText);
+  const betAmount = parseInt(document.getElementById('betAmount').value);
+
+  if (betAmount > currentCoins) {
+    showModal('Auto spin stopped: Not enough coins');
+    stopAutoSpin();
+    return;
+  }
+
+  spin().then((result) => {
+    if (result !== false) {
+      autoSpinCount--;
+    }
+  }).catch(() => {
+    stopAutoSpin();
+  });
 }
 
 function stopAutoSpin() {
   clearTimeout(autoSpinInterval);
   autoSpinCount = 0;
+  isAutoSpinning = false; // Reset auto spin mode
+  resetAutoSpinButton();
+}
+
+function resetAutoSpinButton() {
   const autoSpinButton = document.getElementById('autoSpinButton');
   if (autoSpinButton) {
     autoSpinButton.innerText = 'Start Auto Spin';
+    autoSpinButton.style.backgroundColor = '#007bff';
   }
 }
 
-function spin() {
+// Convert ws.send to fetch
+
+async function spin() {
+  if (isSpinning) {
+    console.log('Still spinning, please wait...');
+    return false; // Return false jika tidak bisa spin
+  }
+
   const username = localStorage.getItem('username');
   const betAmount = parseInt(document.getElementById('betAmount').value);
   const currentCoins = parseInt(document.getElementById('coins').innerText);
 
-  if (!username) {
-    showModal('Please login first');
+  // Validasi input
+  if (!username || isNaN(betAmount) || betAmount < 1 || betAmount > currentCoins) {
+    // ... validasi checks ...
+    return false;
+  }
+  
+  try {
+    isSpinning = true; // Set lock
+    const spinButton = document.querySelector('button[onclick="spin()"]');
+    spinButton.disabled = true;
+    
+    document.getElementById('coins').innerText = currentCoins - betAmount;
+    
+    const response = await fetch('/spin', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, betAmount })
+    });
+    
+    if (!response.ok) {
+      throw new Error('Spin failed');
+    }
+
+    const result = await response.json();
+    handleSpinResult(result);
+    return result;
+
+  } catch (error) {
+    console.error('Error:', error);
+    document.getElementById('coins').innerText = currentCoins;
+    showModal(error.message);
+    isSpinning = false; // Release lock on error
+    return false;
+  }
+}
+
+// Single handleSpinResult function
+function handleSpinResult(data) {
+  if (data.type === 'error') {
+    showModal(data.message);
     stopAutoSpin();
+    isSpinning = false;
     return;
   }
 
-  if (isNaN(betAmount) || betAmount < 1) {
-    showModal('Please enter a valid bet amount');
-    stopAutoSpin();
-    return;
-  }
+  const resultMessage = document.getElementById('resultMessage');
+  const coinsElement = document.getElementById('coins');
 
-  if (betAmount > currentCoins) {
-    showModal('Not enough coins');
-    stopAutoSpin(); // Stop auto spin when coins run out
-    document.getElementById('autoSpinButton').innerText = 'Start Auto Spin';
-    return;
+  resultMessage.innerText = '';
+  resultMessage.style.color = '';
+  coinsElement.innerText = data.tempCoins;
+
+  rollAll(data.result === 'win', data.symbols).then(() => {
+    setTimeout(() => {
+      // Show result
+      if (data.combination) {
+        resultMessage.innerText = data.combination.message;
+        resultMessage.style.color = data.result === 'win' ? 'green' : 'red';
+      } else {
+        resultMessage.innerText = `You ${data.result}!`;
+        resultMessage.style.color = data.result === 'win' ? 'green' : 'red';
+      }
+
+      // Handle win/lose animations and updates
+      if (data.result === 'win') {
+        setTimeout(() => {
+          animateCoins(data.tempCoins, data.newCoins);
+          
+          setTimeout(() => {
+            updateServerAndFinish();
+          }, 1500);
+        }, 1000);
+      } else {
+        coinsElement.innerText = data.newCoins;
+        updateServerAndFinish();
+      }
+    }, 500);
+  });
+
+  function updateServerAndFinish() {
+    if (data.shouldUpdateDb) {
+      fetch('/updateUserVariable', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          username: localStorage.getItem('username'),
+          variable: 'coins',
+          value: data.newCoins
+        })
+      });
+    }
+
+    // Reset states
+    isSpinning = false;
+    const spinButton = document.querySelector('button[onclick="spin()"]');
+    if (spinButton) spinButton.disabled = false;
+
+    // Handle auto spin
+    if (isAutoSpinning && autoSpinCount > 0) {
+      const nextBet = parseInt(document.getElementById('betAmount').value);
+      if (nextBet > data.newCoins) {
+        showModal('Auto spin stopped: Not enough coins for next spin');
+        stopAutoSpin();
+      } else {
+        autoSpinInterval = setTimeout(autoSpin, 2000);
+      }
+    } else if (autoSpinCount === 0) {
+      // Only stop if we've completed all auto spins
+      stopAutoSpin();
+    }
   }
-  
-  // Deduct bet amount from displayed coins immediately
-  document.getElementById('coins').innerText = currentCoins - betAmount;
-  
-  const spinButton = document.querySelector('button[onclick="spin()"]');
-  spinButton.disabled = true;
-  
-  ws.send(JSON.stringify({ 
-    type: 'spin',
-    username: username,
-    betAmount: betAmount
-  }));
-  
-  setTimeout(() => {
-    spinButton.disabled = false;
-  }, 1500);
 }
 
 function handleLoginResponse(data) {
@@ -246,49 +423,114 @@ function handleLoginResponse(data) {
     // Fix: Use the actual coins value or 0 as fallback, not 200
     document.getElementById('coins').innerText = data.coins ?? 0;
     
-    ws.send(JSON.stringify({ 
-      type: 'connect',
-      username: data.username 
-    }));
+    fetch('/connect', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: data.username })
+    });
   } else {
     showModal('Login failed');
   }
 }
 
+// Update handleSpinResult to properly time the coin updates
 function handleSpinResult(data) {
   if (data.type === 'error') {
     showModal(data.message);
-    stopAutoSpin(); // Stop auto spin on any error
+    stopAutoSpin();
     return;
   }
   
-  rollAll(data.result === 'win', data.symbols).then(() => {
-    document.getElementById('coins').innerText = data.newCoins;
-    const resultMessage = document.getElementById('resultMessage');
-    
+  const spinPromise = rollAll(data.result === 'win', data.symbols);
+  const resultMessage = document.getElementById('resultMessage');
+  const coinsElement = document.getElementById('coins');
+
+  // Tunggu animasi slot selesai
+  spinPromise.then(() => {
+    // Tampilkan hasil
     if (data.combination) {
-      resultMessage.innerText = data.combination.message; // Just show the message without result prefix
+      resultMessage.innerText = data.combination.message;
       resultMessage.style.color = data.result === 'win' ? 'green' : 'red';
     } else {
       resultMessage.innerText = `You ${data.result}!`;
       resultMessage.style.color = data.result === 'win' ? 'green' : 'red';
     }
-    
-    if (autoSpinCount > 0) {
-      // Check if we have enough coins for next spin before continuing
-      const nextBet = parseInt(document.getElementById('betAmount').value);
-      const currentCoins = parseInt(document.getElementById('coins').innerText);
-      
-      if (nextBet > currentCoins) {
-        showModal('Auto spin stopped: Not enough coins for next spin');
-        stopAutoSpin();
+
+    // Set timeout untuk delay setelah hasil muncul
+    setTimeout(() => {
+      // Jika menang, animasikan penambahan coins
+      if (data.result === 'win') {
+        const currentCoins = parseInt(coinsElement.innerText);
+        animateCoins(currentCoins, data.newCoins);
       } else {
-        autoSpinInterval = setTimeout(autoSpin, 2000);
+        // Jika kalah tidak perlu animasi karena coins sudah dikurangi di awal
+        coinsElement.innerText = data.newCoins;
       }
-    } else {
-      document.getElementById('autoSpinButton').innerText = 'Start Auto Spin';
-    }
+
+      // Update server setelah animasi selesai
+      fetch('/updateUserVariable', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          username: localStorage.getItem('username'),
+          variable: 'coins',
+          value: data.newCoins
+        })
+      });
+
+      // Handle auto spin setelah semua animasi selesai
+      if (autoSpinCount > 0) {
+        const nextBet = parseInt(document.getElementById('betAmount').value);
+        if (nextBet > data.newCoins) {
+          showModal('Auto spin stopped: Not enough coins for next spin');
+          stopAutoSpin();
+        } else {
+          autoSpinInterval = setTimeout(autoSpin, 2000);
+        }
+      } else {
+        document.getElementById('autoSpinButton').innerText = 'Start Auto Spin';
+      }
+    }, 500); // Delay 500ms setelah hasil muncul
   });
+}
+
+// Update animateCoins function
+function animateCoins(start, end) {
+  const duration = 2000; // Durasi animasi 1.5 detik untuk gerakan yang lebih halus
+  const coinsElement = document.getElementById('coins');
+  const startTime = performance.now();
+  const difference = end - start;
+
+  function updateCoins(currentTime) {
+    const elapsed = currentTime - startTime;
+    const progress = Math.min(elapsed / duration, 1);
+    
+    // Menggunakan easeOutExpo untuk efek melambat yang lebih dramatis di akhir
+    const easeOutExpo = (x) => {
+      return x === 1 ? 1 : 1 - Math.pow(2, -10 * x);
+    };
+
+    // Menggunakan easing function untuk mendapatkan posisi yang lebih halus
+    const currentValue = Math.round(start + (difference * easeOutExpo(progress)));
+    
+    // Memastikan nilai tetap dalam range yang benar
+    if (difference > 0) { // Saat menang
+      coinsElement.innerText = Math.min(currentValue, end);
+    } else { // Saat kalah
+      coinsElement.innerText = Math.max(currentValue, end);
+    }
+
+    if (progress < 1) {
+      requestAnimationFrame(updateCoins);
+    } else {
+      // Pastikan nilai akhir tepat
+      setTimeout(() => {
+        coinsElement.innerText = end;
+      }, 50); // Delay kecil untuk memastikan transisi halus
+    }
+  }
+
+  requestAnimationFrame(updateCoins);
 }
 
 async function rollAll(forceWin, symbols) {
@@ -452,8 +694,142 @@ function toggleAutoSpin() {
 function stopAutoSpin() {
   clearTimeout(autoSpinInterval);
   autoSpinCount = 0;
-  const autoSpinButton = document.getElementById('autoSpinButton');
-  if (autoSpinButton) {
-    autoSpinButton.innerText = 'Start Auto Spin';
+  isAutoSpinning = false; // Reset auto spin mode
+  resetAutoSpinButton();
+}
+
+async function spin() {
+  if (isSpinning) {
+    console.log('Still spinning, please wait...');
+    return false;
+  }
+
+  const username = localStorage.getItem('username');
+  const betAmount = parseInt(document.getElementById('betAmount').value);
+  const currentCoins = parseInt(document.getElementById('coins').innerText);
+
+  if (!username || isNaN(betAmount) || betAmount < 1) {
+    showModal(!username ? 'Please login first' : 'Invalid bet amount');
+    stopAutoSpin();
+    return false;
+  }
+
+  if (betAmount > currentCoins) {
+    showModal('Not enough coins');
+    stopAutoSpin();
+    return false;
+  }
+  
+  try {
+    isSpinning = true;
+    const spinButton = document.querySelector('button[onclick="spin()"]');
+    if (spinButton) spinButton.disabled = true;
+    
+    // Kurangi coins sebelum spin
+    document.getElementById('coins').innerText = currentCoins - betAmount;
+    
+    const response = await fetch('/spin', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, betAmount })
+    });
+    
+    if (!response.ok) {
+      throw new Error('Spin failed');
+    }
+
+    return await response.json();
+
+  } catch (error) {
+    console.error('Error:', error);
+    document.getElementById('coins').innerText = currentCoins;
+    showModal(error.message);
+    completeSpinCycle();
+    return false;
+  }
+}
+
+function completeSpinCycle() {
+  isSpinning = false;
+  const spinButton = document.querySelector('button[onclick="spin()"]');
+  if (spinButton) spinButton.disabled = false;
+}
+
+function handleSpinResult(data) {
+  if (data.type === 'error') {
+    showModal(data.message);
+    stopAutoSpin();
+    completeSpinCycle();
+    return;
+  }
+
+  const resultMessage = document.getElementById('resultMessage');
+  const coinsElement = document.getElementById('coins');
+
+  resultMessage.innerText = '';
+  resultMessage.style.color = '';
+  coinsElement.innerText = data.tempCoins;
+
+  // Langkah 1: Animasi slot
+  rollAll(data.result === 'win', data.symbols).then(() => {
+    // Langkah 2: Tampilkan hasil
+    setTimeout(() => {
+      if (data.combination) {
+        resultMessage.innerText = data.combination.message;
+        resultMessage.style.color = data.result === 'win' ? 'green' : 'red';
+      } else {
+        resultMessage.innerText = `You ${data.result}!`;
+        resultMessage.style.color = data.result === 'win' ? 'green' : 'red';
+      }
+
+      // Langkah 3: Update coins
+      if (data.result === 'win') {
+        setTimeout(() => {
+          animateCoins(data.tempCoins, data.newCoins);
+          
+          setTimeout(() => {
+            if (data.shouldUpdateDb) {
+              updateServer();
+            }
+            finishSpin();
+          }, 1500);
+        }, 1000);
+      } else {
+        coinsElement.innerText = data.newCoins;
+        if (data.shouldUpdateDb) {
+          updateServer();
+        }
+        finishSpin();
+      }
+    }, 500);
+  });
+
+  function updateServer() {
+    fetch('/updateUserVariable', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        username: localStorage.getItem('username'),
+        variable: 'coins',
+        value: data.newCoins
+      })
+    });
+  }
+
+  function finishSpin() {
+    completeSpinCycle();
+    
+    // Only schedule next spin if still in auto spin mode
+    if (isAutoSpinning && autoSpinCount > 0) {
+      const nextBet = parseInt(document.getElementById('betAmount').value);
+      if (nextBet > data.newCoins) {
+        showModal('Auto spin stopped: Not enough coins for next spin');
+        stopAutoSpin();
+      } else {
+        autoSpinInterval = setTimeout(autoSpin, 2000);
+      }
+    } else {
+      stopAutoSpin(); // Ensure auto spin is stopped and button is reset
+    }
   }
 }

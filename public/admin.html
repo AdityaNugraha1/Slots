@@ -7,55 +7,57 @@
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
-  <center>
-  <div style="display: flex; flex-direction: column; margin: 10%;">
-    <h2>Admin Dashboard</h2>
-    <button onclick="logout()">Logout</button>
-    <table>
-      <colgroup>
-        <col style="width: 11%"> <!-- Username -->
-        <col style="width: 11%"> <!-- Password -->
-        <col style="width: 11%"> <!-- Coins -->
-        <col style="width: 8%">  <!-- Wins -->
-        <col style="width: 8%">  <!-- Losses -->
-        <col style="width: 12%"> <!-- Win Percentage -->
-        <col style="width: 8%">  <!-- Active -->
-        <col style="width: 11%"> <!-- Role -->
-        <col style="width: 20%"> <!-- Action -->
-      </colgroup>
-      <thead>
-        <tr>
-          <th>Username</th>
-          <th>Password</th>
-          <th>Coins</th>
-          <th>Wins</th>
-          <th>Losses</th>
-          <th>Win Percentage</th>
-          <th>Active</th>
-          <th>Role</th>
-          <th>Action</th>
-        </tr>
-      </thead>
-      <tbody id="userTable">
-        <!-- User data will be populated here -->
-      </tbody>
-    </table>
-  </div>
-  </center>
+  <div class="container">
+    <center>
+    <div style="display: flex; flex-direction: column; margin: 10%;">
+      <h2>Admin Dashboard</h2>
+      <button onclick="logout()">Logout</button>
+      <table>
+        <colgroup>
+          <col style="width: 11%"> <!-- Username -->
+          <col style="width: 11%"> <!-- Password -->
+          <col style="width: 11%"> <!-- Coins -->
+          <col style="width: 8%">  <!-- Wins -->
+          <col style="width: 8%">  <!-- Losses -->
+          <col style="width: 12%"> <!-- Win Percentage -->
+          <col style="width: 8%">  <!-- Active -->
+          <col style="width: 11%"> <!-- Role -->
+          <col style="width: 20%"> <!-- Action -->
+        </colgroup>
+        <thead>
+          <tr>
+            <th>Username</th>
+            <th>Password</th>
+            <th>Coins</th>
+            <th>Wins</th>
+            <th>Losses</th>
+            <th>Win Percentage</th>
+            <th>Active</th>
+            <th>Role</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody id="userTable">
+          <!-- User data will be populated here -->
+        </tbody>
+      </table>
+    </div>
+    </center>
 
-  <!-- Modal Structure -->
-  <div id="adminModal" class="modal">
-    <div class="modal-content">
-      <span class="close" onclick="closeAdminModal()">&times;</span>
-      <p id="adminModalMessage"></p>
-      <div class="modal-buttons">
-        <button id="modalConfirm" onclick="handleModalConfirm()">OK</button>
-        <button id="modalCancel" onclick="closeAdminModal()">Cancel</button>
+    <!-- Modal Structure -->
+    <div id="adminModal" class="modal">
+      <div class="modal-content">
+        <span class="close" onclick="closeAdminModal()">&times;</span>
+        <p id="adminModalMessage"></p>
+        <div class="modal-buttons">
+          <button id="modalConfirm" onclick="handleModalConfirm()">OK</button>
+          <button id="modalCancel" onclick="closeAdminModal()">Cancel</button>
+        </div>
       </div>
     </div>
-  </div>
 
-  <!-- Add script tag at the end of body -->
-  <script src="js/admin.js"></script>
+    <!-- Add script tag at the end of body -->
+    <script src="js/admin.js"></script>
+  </div>
 </body>
 </html>

@@ -1,8 +1,6 @@
 const express = require('express');
 const http = require('http');
-const WebSocket = require('ws');
 const session = require('express-session');
-const expressWs = require('express-ws');
 const admin = require('firebase-admin');
 const serviceAccount = require('./surenjudi103-firebase-adminsdk-xp59q-7a04f91aa8.json');
 const bodyParser = require('body-parser');
@@ -14,7 +12,6 @@ admin.initializeApp({
 const db = admin.firestore();
 const app = express();
 const server = http.createServer(app);
-const wsInstance = expressWs(app, server);
 
 app.use(express.json());
 app.use(bodyParser.json());
@@ -27,6 +24,7 @@ app.use(session({
 }));
 
 const loggedInUsers = new Set();
+const clients = new Set();
 
 // Middleware to check if user is authenticated
 function isAuthenticated(req, res, next) {
@@ -97,25 +95,22 @@ app.post('/login', async (req, res) => {
       
       console.log('User logged in:', username); // Debug log
       
-      req.session.save(() => {
-        broadcastUserList();
-        if (user.role === 'admin') {
-          return res.send({ 
-            message: 'Login successful', 
-            redirect: '/admin',
-            username: username,
-            role: user.role
-          });
-        } else {
-          return res.send({ 
-            message: 'Login successful', 
-            redirect: '/',
-            coins: user.coins ?? 0,
-            username: username,
-            role: user.role
-          });
-        }
-      });
+      const response = user.role === 'admin' ? {
+        message: 'Login successful',
+        redirect: '/admin',
+        username: username,
+        role: user.role
+      } : {
+        message: 'Login successful',
+        redirect: '/',
+        coins: user.coins ?? 0,
+        username: username,
+        role: user.role
+      };
+      
+      res.json(response);
+      // Broadcast user list update after sending response
+      broadcastUserList();
     } else {
       res.status(400).send('Invalid credentials');
     }
@@ -154,66 +149,114 @@ app.get('/logout', async (req, res) => {
   res.redirect('/');
 });
 
-app.ws('/', (ws, req) => {
-  ws.on('message', async (message) => {
-    try {
-      const data = JSON.parse(message);
-      console.log('Received:', data);
+// Replace WebSocket with SSE endpoint
+app.get('/events', (req, res) => {
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    'Connection': 'keep-alive'
+  });
 
-      switch (data.type) {
-        case 'connect':
-          if (data.username) {
-            ws.username = data.username;
-            loggedInUsers.add(data.username);
-            await updateActiveStatus(data.username, true);
-            broadcastUserList();
-          }
-          break;
-        case 'adminConnect':
-          if (data.username) {
-            ws.username = data.username;
-            loggedInUsers.add(data.username);
-            await updateActiveStatus(data.username, true);
-            await sendUserList(ws); // Send user list to admin on connect
-          }
-          break;
-        case 'spin':
-          if (data.username) {
-            await handleSpin(ws, data.username, data.betAmount);
-          } else {
-            ws.send(JSON.stringify({ 
-              type: 'error', 
-              message: 'Not logged in' 
-            }));
-          }
-          break;
-        case 'updateWinPercentage':
-          await updateWinPercentage(data.username, data.winPercentage);
-          break;
-        case 'logout':
-          await logoutUser(ws, data.username);
-          break;
-        case 'updateUserVariable':
-          await updateUserVariable(data.username, data.variable, data.value);
-          break;
-        // ... other cases ...
+  // Add client to Set
+  clients.add(res);
+
+  // Remove client on connection close
+  req.on('close', () => {
+    clients.delete(res);
+  });
+});
+
+// Add new endpoint to get initial user list for admin
+app.get('/admin/users', isAuthenticated, isAdmin, async (req, res) => {
+  try {
+    const users = await getUserList();
+    res.json({ users });
+  } catch (error) {
+    console.error('Error getting users:', error);
+    res.status(500).json({ error: 'Failed to get users' });
+  }
+});
+
+// Update the broadcast function to be more reliable
+function broadcast(eventType, data) {
+  const message = `event: ${eventType}\ndata: ${JSON.stringify(data)}\n\n`;
+  const deadClients = new Set();
+  
+  clients.forEach(client => {
+    try {
+      client.write(message);
+      // Force flush the data
+      if (typeof client.flush === 'function') {
+        client.flush();
       }
     } catch (error) {
-      console.error('Error handling message:', error);
-      ws.send(JSON.stringify({ 
-        type: 'error', 
-        message: 'Internal server error' 
-      }));
+      console.error('Error broadcasting to client:', error);
+      deadClients.add(client);
     }
   });
 
-  ws.on('close', async () => {
-    if (ws.username) {
-      loggedInUsers.delete(ws.username);
-      await updateActiveStatus(ws.username, false);
-      broadcastUserList();
+  deadClients.forEach(client => clients.delete(client));
+}
+
+// Convert WebSocket handlers to regular endpoints
+app.post('/spin', async (req, res) => {
+  const { username, betAmount } = req.body;
+  try {
+    const result = await handleSpin(username, betAmount);
+    broadcast('spinResult', result);
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/updateUserVariable', async (req, res) => {
+  const { username, variable, value } = req.body;
+  
+  try {
+    // Validate required fields
+    if (!username || !variable || value === undefined) {
+      throw new Error('Missing required fields');
     }
-  });
+
+    const userRef = db.collection('users').doc(username.toString());
+    
+    let processedValue = value;
+    if (variable === 'coins' || variable === 'wins' || variable === 'losses') {
+      processedValue = parseInt(value);
+      if (isNaN(processedValue)) {
+        throw new Error('Invalid number value');
+      }
+    }
+
+    const updateData = {};
+    updateData[variable] = processedValue;
+    
+    await userRef.update(updateData);
+    
+    const updatedUserDoc = await userRef.get();
+    const updatedUserData = updatedUserDoc.data();
+    
+    broadcast('userUpdate', {
+      username,
+      variable,
+      value: processedValue,
+      userData: updatedUserData
+    });
+    
+    res.json({ 
+      success: true,
+      updatedValue: processedValue,
+      userData: updatedUserData 
+    });
+
+  } catch (error) {
+    console.error('Error updating user variable:', error);
+    res.status(500).json({ 
+      error: error.message,
+      success: false 
+    });
+  }
 });
 
 // Endpoint to update user role
@@ -290,9 +333,10 @@ const SYMBOL_MULTIPLIERS = {
   'bell': 2       // Bell memberikan 2x
 };
 
-async function handleSpin(ws, username, betAmount) {
+// Update handleSpin to broadcast updates immediately
+async function handleSpin(username, betAmount) {
   if (!username) {
-    return ws.send(JSON.stringify({ type: 'error', message: 'Not logged in' }));
+    return { type: 'error', message: 'Not logged in' };
   }
 
   try {
@@ -300,7 +344,7 @@ async function handleSpin(ws, username, betAmount) {
     const userDoc = await userRef.get();
     
     if (!userDoc.exists) {
-      return ws.send(JSON.stringify({ type: 'error', message: 'User not found' }));
+      return { type: 'error', message: 'User not found' };
     }
 
     const userData = userDoc.data();
@@ -308,13 +352,12 @@ async function handleSpin(ws, username, betAmount) {
     betAmount = parseInt(betAmount);
     
     if (userData.coins < betAmount) {
-      return ws.send(JSON.stringify({ type: 'error', message: 'Not enough coins' }));
+      return { type: 'error', message: 'Not enough coins' };
     }
 
-    // Kurangi coins dengan betAmount
-    const updatedCoins = userData.coins - betAmount;
-    await userRef.update({ coins: updatedCoins });
-
+    // Kurangi coins dengan betAmount tapi jangan update database dulu
+    const tempCoins = userData.coins - betAmount;
+    
     // Random win check berdasarkan winPercentage
     const isWin = Math.random() * 100 < winPercentage;
 
@@ -322,47 +365,62 @@ async function handleSpin(ws, username, betAmount) {
     let result = 'lose';
     let multiplier = 0;
     let combination = null;
+    let winAmount = 0;
 
     if (isWin) {
-      // Jika menang, pilih satu simbol secara random untuk semua reel
       const winningSymbolIndex = Math.floor(Math.random() * iconMap.length);
       symbols = Array(3).fill(winningSymbolIndex);
       const winningSymbol = iconMap[winningSymbolIndex];
       multiplier = SYMBOL_MULTIPLIERS[winningSymbol];
       result = 'win';
-      const winAmount = Math.floor(betAmount * multiplier);
+      winAmount = Math.floor(betAmount * multiplier);
       combination = {
         type: 'three_of_a_kind',
         symbol: winningSymbol,
-        message: `Triple ${winningSymbol}! Win ${winAmount} coins!` // Removed "win!" prefix
+        message: `Triple ${winningSymbol}! Win ${winAmount} coins!`
       };
     }
 
-    const winAmount = result === 'win' ? Math.floor(betAmount * multiplier) : 0;
-    const newCoins = updatedCoins + winAmount;
+    const newCoins = tempCoins + winAmount;
 
-    await userRef.update({
-      coins: newCoins,
-      wins: result === 'win' ? userData.wins + 1 : userData.wins,
-      losses: result === 'lose' ? userData.losses + 1 : userData.losses
-    });
-
-    ws.send(JSON.stringify({
+    // Return result first without updating database
+    return {
       type: 'spinResult',
       result,
-      newCoins,
+      tempCoins,   // Kirim coins sementara (setelah dikurangi bet)
+      newCoins,    // Coins akhir setelah win/lose
       combination,
-      symbols, // Kirim array indeks simbol
+      symbols,
       username,
       betAmount,
       multiplier,
-      winAmount
-    }));
+      winAmount,
+      shouldUpdateDb: true // Flag untuk update database
+    };
 
-    broadcastUserList();
   } catch (error) {
     console.error('Spin error:', error);
-    ws.send(JSON.stringify({ type: 'error', message: 'Error processing spin' }));
+    return { type: 'error', message: 'Error processing spin' };
+  }
+}
+
+// Update the sendUserList function to return data instead of sending it
+async function getUserList() {
+  const usersSnapshot = await db.collection('users').get();
+  return usersSnapshot.docs.map(doc => ({
+    username: doc.id,
+    ...doc.data(),
+    active: loggedInUsers.has(doc.id)
+  }));
+}
+
+// Update broadcastUserList to use the new pattern
+async function broadcastUserList() {
+  try {
+    const users = await getUserList();
+    broadcast('userList', { users });
+  } catch (error) {
+    console.error('Error broadcasting user list:', error);
   }
 }
 
@@ -411,14 +469,8 @@ async function updateActiveStatus(username, isActive) {
   await userRef.update({ active: isActive });
 }
 
-function broadcastUserList() {
-  wsInstance.getWss().clients.forEach(client => {
-    if (client.readyState === WebSocket.OPEN) {
-      sendUserList(client);
-    }
-  });
-}
+const port = 8080;
 
-server.listen(3000, () => {
-  console.log('Server is listening on port 3000');
+server.listen(port, () => {
+  console.log(`Server is listening on port ${port}`);
 });
